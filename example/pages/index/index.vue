@@ -1,16 +1,11 @@
 <template>
 	<view class="page">
 		<view class="canvas-wrap">
-			<!-- <canvas
-				class="canvas"
-				canvas-id="canvas-select"
-				disable-scroll
-				@touchstart="onTouchStart"
-				@touchmove="onTouchMove"
-				@touchend="onTouchEnd"
-				@touchcancel="onTouchEnd"
-			></canvas> -->
-			<uni-canvas-select></uni-canvas-select>
+			<jrm-canvas-select
+				style="width: 100%; height: 710rpx"
+				url="/static/bg.jpg"
+				@inited="onInited"
+			></jrm-canvas-select>
 		</view>
 
 		<view class="status">
@@ -288,17 +283,12 @@
 			<view class="help-item">画笔 / 橡皮擦：单指按住拖动</view>
 			<view class="help-item">画布：单指拖动画布，双指捏合缩放</view>
 			<view class="help-item">移动形状：先点选，再单指拖动</view>
-			<view class="help-item help-warn">
-				已知限制：多边形与折线暂不支持点击选中（上游未初始化离屏画布用于命中检测）。
-			</view>
 		</view>
 	</view>
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
-import { onReady } from "@dcloudio/uni-app";
-import CanvasSelect from "../../../src/index";
+import { ref, computed, onUnmounted } from "vue";
 
 const TOOLS = [
 	{ type: 0, name: "选择模式" },
@@ -361,11 +351,9 @@ const FONT_LIST = [
 
 /** CanvasSelect 实例保持非响应式，避免 Vue 代理 canvas 上下文 */
 let instance = null;
-/** 经 adapterEvent 包装后的触摸处理器 */
-const touch = { down: null, move: null, up: null };
 let sampleLoaded = false;
 let lastRefresh = 0;
-let lastPosition = 0;
+let positionTimer = null;
 
 const createType = ref(0);
 const positionText = ref("0, 0");
@@ -517,107 +505,69 @@ function loadSampleOnce() {
 	addLog("加载示例数据", `${data.length} 条`);
 }
 
-function initCanvas() {
-	const ctx = uni.createCanvasContext("canvas-select");
-	uni.createSelectorQuery()
-		.select(".canvas")
-		.boundingClientRect((data) => {
-			if (!data || !data.width || !data.height) {
-				setTimeout(initCanvas, 100);
-				return;
-			}
-			instance = new CanvasSelect(
-				{
-					ctx,
-					width: data.width,
-					height: data.height,
-					left: data.left,
-					top: data.top,
-				},
-				imageUrl.value,
-			);
-			// 触摸事件下 adapterEvent 会把触点的 x/y 映射为 clientX/clientY，
-			// 而各端 x/y 语义不一致：小程序为画布内坐标（LEFT/TOP 应为 0），
-			// 若某些端返回的是视口坐标，取消下面两行注释即可。
-			// instance.LEFT = data.left;
-			// instance.TOP = data.top;
+/** jrm-canvas-select 初始化完成，回调参数即 CanvasSelect 实例 */
+function onInited(inst) {
+	if (!inst) return;
+	instance = inst;
 
-			instance.isMobile = true;
-			instance.gridMenuEnable = false;
-			instance.createType = 0;
-			instance.strokeStyle = strokeStyle.value;
-			instance.fillStyle = hexToRgba(fillStyle.value, 0.25);
-			instance.lineWidth = lineWidth.value;
-			instance.ctrlRadius = ctrlRadius.value;
-			instance.brushStokeStyle = brushColor.value;
-			instance.brushSize = brushSize.value;
-			instance.eraserSize = eraserSize.value;
-			instance.labelFont = FONT_LIST[labelFontIndex.value];
-			instance.labelFillStyle = labelFillStyle.value;
-			instance.textFillStyle = textFillStyle.value;
+	instance.isMobile = true;
+	// 移动端无右键菜单，网格行列改由面板输入框设置
+	instance.gridMenuEnable = false;
+	instance.createType = 0;
+	instance.strokeStyle = strokeStyle.value;
+	instance.fillStyle = hexToRgba(fillStyle.value, 0.25);
+	instance.lineWidth = lineWidth.value;
+	instance.ctrlRadius = ctrlRadius.value;
+	instance.brushStokeStyle = brushColor.value;
+	instance.brushSize = brushSize.value;
+	instance.eraserSize = eraserSize.value;
+	instance.labelFont = FONT_LIST[labelFontIndex.value];
+	instance.labelFillStyle = labelFillStyle.value;
+	instance.textFillStyle = textFillStyle.value;
 
-			touch.down = instance.adapterEvent(instance.handleMouseDown);
-			touch.move = instance.adapterEvent(instance.handleMouseMove);
-			touch.up = instance.adapterEvent(instance.handleMouseUp);
+	instance.on("load", () => {
+		addLog("图片加载完成", "");
+		// handleLoad 先 emit('load') 再赋值尺寸并 fitZoom，故延迟读取
+		setTimeout(loadSampleOnce, 50);
+	});
+	instance.on("warn", (msg) => {
+		addLog("警告", String(msg));
+	});
+	instance.on("add", (info) => {
+		addLog(
+			"添加标注",
+			`${SHAPE_NAMES[info.type] || "未知"}${info.label ? `「${info.label}」` : ""}`,
+		);
+		refreshUI(true);
+	});
+	instance.on("delete", (info) => {
+		addLog(
+			"删除标注",
+			`${SHAPE_NAMES[info.type] || "未知"}${info.label ? `「${info.label}」` : ""}`,
+		);
+		refreshUI(true);
+	});
+	instance.on("select", (info) => {
+		addLog(
+			info ? "选中标注" : "取消选中",
+			info ? SHAPE_NAMES[info.type] || "" : "",
+		);
+		refreshUI(true);
+	});
+	instance.on("updated", () => refreshUI());
 
-			instance.on("load", () => {
-				addLog("图片加载完成", "");
-				// handleLoad 先 emit('load') 再赋值尺寸并 fitZoom，故延迟读取
-				setTimeout(loadSampleOnce, 50);
-			});
-			instance.on("warn", (msg) => {
-				addLog("警告", String(msg));
-			});
-			instance.on("add", (info) => {
-				addLog(
-					"添加标注",
-					`${SHAPE_NAMES[info.type] || "未知"}${info.label ? `「${info.label}」` : ""}`,
-				);
-				refreshUI(true);
-			});
-			instance.on("delete", (info) => {
-				addLog(
-					"删除标注",
-					`${SHAPE_NAMES[info.type] || "未知"}${info.label ? `「${info.label}」` : ""}`,
-				);
-				refreshUI(true);
-			});
-			instance.on("select", (info) => {
-				addLog(
-					info ? "选中标注" : "取消选中",
-					info ? SHAPE_NAMES[info.type] || "" : "",
-				);
-				refreshUI(true);
-			});
-			instance.on("updated", () => refreshUI());
+	// 图片加载失败兜底，避免示例数据永不出现
+	setTimeout(loadSampleOnce, 3000);
 
-			// 图片加载失败兜底，避免示例数据永不出现
-			setTimeout(loadSampleOnce, 3000);
-
-			refreshUI(true);
-			addLog(
-				"初始化完成",
-				`画布 ${Math.round(data.width)}×${Math.round(data.height)}`,
-			);
-		})
-		.exec();
-}
-
-const onTouchStart = (e) => {
-	if (touch.down) touch.down(e);
-};
-const onTouchMove = (e) => {
-	if (touch.move) touch.move(e);
-	const now = Date.now();
-	if (instance && now - lastPosition > 100) {
-		lastPosition = now;
+	// 组件未暴露触摸回调，坐标读数改为轮询实例上的 position
+	positionTimer = setInterval(() => {
+		if (!instance) return;
 		positionText.value = `${instance.position[0]}, ${instance.position[1]}`;
-	}
-};
-const onTouchEnd = (e) => {
-	if (touch.up) touch.up(e);
+	}, 100);
+
 	refreshUI(true);
-};
+	addLog("初始化完成", `画布 ${instance.WIDTH}×${instance.HEIGHT}`);
+}
 
 function setCreateType(type) {
 	createType.value = type;
@@ -843,8 +793,11 @@ function chooseLocalImage() {
 	});
 }
 
-onReady(() => {
-	initCanvas();
+onUnmounted(() => {
+	if (positionTimer) {
+		clearInterval(positionTimer);
+		positionTimer = null;
+	}
 });
 </script>
 
@@ -860,11 +813,6 @@ onReady(() => {
 	border-radius: 16rpx;
 	overflow: hidden;
 	box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.06);
-}
-
-.canvas {
-	width: 100%;
-	height: 55vh;
 }
 
 .status {
@@ -1049,10 +997,5 @@ onReady(() => {
 	font-size: 24rpx;
 	color: #424242;
 	padding: 6rpx 0;
-}
-
-.help-warn {
-	color: #b23c17;
-	margin-top: 10rpx;
 }
 </style>

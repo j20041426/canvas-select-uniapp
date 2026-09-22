@@ -31,8 +31,10 @@ enum Shape {
   Eraser,
 }
 export type CanvasSelectOptions = {
-  /** 画布上下文 */
-  ctx: any;
+  /** 画布 canvas-id */
+  canvasId: string;
+  /** 离屏画布 canvas-id */
+  offscreenCanvasId: string;
   /** 画布宽度 */
   width: number;
   /** 画布高度 */
@@ -98,11 +100,15 @@ export default class CanvasSelect extends EventBus {
   /** 开启矩形旋转控制点 */
   showRotation = false;
 
-  ctx: UniNamespace.CanvasContext | null | undefined;
   /** 所有标注数据 */
   dataset: AllShape[] = [];
 
+  ctx: UniNamespace.CanvasContext | null | undefined;
   offScreenCtx: UniNamespace.CanvasContext | null | undefined;
+  /** 画布 canvas-id */
+  canvasId = "";
+  /** 离屏画布 canvas-id，用于像素命中检测时读取画布数据 */
+  offscreenCanvasId = "";
 
   /** 记录锚点距离 */
   remmber: number[][] = [];
@@ -173,8 +179,11 @@ export default class CanvasSelect extends EventBus {
 
   constructor(options: CanvasSelectOptions, src?: string) {
     super();
-    if (options.ctx) {
-      this.ctx = options.ctx;
+    if (options.canvasId && options.offscreenCanvasId) {
+      this.ctx = uni.createCanvasContext(options.canvasId);
+      this.offScreenCtx = uni.createCanvasContext(options.offscreenCanvasId);
+      this.canvasId = options.canvasId;
+      this.offscreenCanvasId = options.offscreenCanvasId;
       // const dpr = uni.getDeviceInfo()?.devicePixelRatio || 1;
       this.WIDTH = Math.round(options.width);
       this.HEIGHT = Math.round(options.height);
@@ -213,11 +222,49 @@ export default class CanvasSelect extends EventBus {
 
   /* 提取像素信息 */
   getImageDataFromCanvas(
-    canvas: HTMLCanvasElement,
-    [x, y, width, height]: [number, number, number, number],
+    canvasId: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
   ) {
-    const context = canvas.getContext("2d", { willReadFrequently: true });
-    return context?.getImageData(x, y, width, height);
+    return new Promise<UniNamespace.CanvasGetImageDataRes>(
+      (resolve, reject) => {
+        uni.canvasGetImageData({
+          canvasId,
+          x,
+          y,
+          width,
+          height,
+          success: (res) => {
+            resolve(res);
+          },
+          fail: (err) => {
+            reject(err);
+          },
+        });
+      },
+    );
+  }
+
+  /* 刷新离屏画布，确保 canvasGetImageData 能读到已绘制的像素 */
+  drawOffscreen(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      if (!this.offScreenCtx?.draw) {
+        resolve();
+        return;
+      }
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve();
+      };
+      // 部分平台不支持 draw 回调，超时兜底避免命中检测被挂起
+      const timer = setTimeout(done, 50);
+      this.offScreenCtx.draw(false, done);
+    });
   }
 
   /** 合成事件 */
@@ -264,7 +311,7 @@ export default class CanvasSelect extends EventBus {
     this.setScale(e.deltaY < 0, true);
   }
 
-  public handleMouseDown(e: MouseEvent | TouchEvent) {
+  public async handleMouseDown(e: MouseEvent | TouchEvent) {
     if (this.lock) return;
     const { mouseX, mouseY, mouseCX, mouseCY } = this.mergeEvent(e);
     const offsetX = Math.round(mouseX / this.scale);
@@ -294,7 +341,7 @@ export default class CanvasSelect extends EventBus {
           this.handleDblclick(e);
         }
         this.remmber = [[offsetX - x0, offsetY - y0]];
-      } else if (this.isInBackground(e)) {
+      } else if (await this.isInBackground(e)) {
         const nx = Math.round(offsetX - this.originX / this.scale);
         const ny = Math.round(offsetY - this.originY / this.scale);
         if (this.activeShape.creating && !this.readonly) {
@@ -392,7 +439,7 @@ export default class CanvasSelect extends EventBus {
           let hitShape: any;
 
           if (this.isCtrlKey && this.activeShape.type) {
-            const hits = this.hitAllOnShape(this.mouse);
+            const hits = await this.hitAllOnShape(this.mouse);
             const currentIdx = hits.findIndex(
               (s: AllShape) => s.index === this.activeShape.index,
             );
@@ -402,7 +449,7 @@ export default class CanvasSelect extends EventBus {
                 : hits[0];
             hitShapeIndex = hitShape ? this.dataset.indexOf(hitShape) : -1;
           } else {
-            [hitShapeIndex, hitShape] = this.hitOnShape(this.mouse);
+            [hitShapeIndex, hitShape] = await this.hitOnShape(this.mouse);
           }
 
           if (hitShapeIndex > -1 && hitShape) {
@@ -461,12 +508,12 @@ export default class CanvasSelect extends EventBus {
     }
   }
 
-  public handleMouseMove(e: MouseEvent | TouchEvent) {
+  public async handleMouseMove(e: MouseEvent | TouchEvent) {
     if (this.lock) return;
     const { mouseX, mouseY, mouseCX, mouseCY } = this.mergeEvent(e);
     const offsetX = Math.round(mouseX / this.scale);
     const offsetY = Math.round(mouseY / this.scale);
-    if (!this.isCtrlKey && this.isInBackground(e)) {
+    if (!this.isCtrlKey && (await this.isInBackground(e))) {
       this.crossX.coor = [
         [offsetX - this.originX / this.scale, 0],
         [offsetX - this.originX / this.scale, this.image.height],
@@ -494,7 +541,8 @@ export default class CanvasSelect extends EventBus {
       if (
         this.ctrlIndex > -1 &&
         this.remmber.length &&
-        (this.isInBackground(e) || this.activeShape.type === Shape.Circle)
+        ((await this.isInBackground(e)) ||
+          this.activeShape.type === Shape.Circle)
       ) {
         const [[x, y]] = this.remmber;
         // resize矩形或旋转
@@ -629,7 +677,7 @@ export default class CanvasSelect extends EventBus {
           }
         }
         if (noLimit) this.activeShape.coor = coor;
-      } else if (this.activeShape.creating && this.isInBackground(e)) {
+      } else if (this.activeShape.creating && (await this.isInBackground(e))) {
         // const x = Math.round(offsetX - this.originX / this.scale);
         // const y = Math.round(offsetY - this.originY / this.scale);
         // 创建矩形
@@ -750,8 +798,8 @@ export default class CanvasSelect extends EventBus {
       // 双击切换网格分区选中状态
       if (this.activeShape.active) {
         this.activeShape.gridRects.forEach(
-          (rect: { coor: Point[]; index: number }) => {
-            if (this.isPointInRect(this.mouse, rect.coor)) {
+          async (rect: { coor: Point[]; index: number }) => {
+            if (await this.isPointInRect(this.mouse, rect.coor)) {
               const thisIndex = this.activeShape.selected.findIndex(
                 (x: number) => rect.index === x,
               );
@@ -888,32 +936,32 @@ export default class CanvasSelect extends EventBus {
    * @param mousePoint 点击位置
    * @returns 布尔值
    */
-  isShapeHit(shape: AllShape, mousePoint: Point): boolean {
+  async isShapeHit(shape: AllShape, mousePoint: Point): Promise<boolean> {
     if (shape.type === Shape.Dot)
-      return this.isPointInCircle(
+      return await this.isPointInCircle(
         mousePoint,
         shape.coor as Point,
         this.ctrlRadius,
       );
     if (shape.type === Shape.Circle)
-      return this.isPointInCircle(
+      return await this.isPointInCircle(
         mousePoint,
         shape.coor as Point,
         (shape as Circle).radius * this.scale,
       );
     if (shape.type === Shape.Rect)
-      return this.isPointInRect(mousePoint, (shape as Rect).coor);
+      return await this.isPointInRect(mousePoint, (shape as Rect).coor);
     if (shape.type === Shape.Polygon)
-      return this.isPointInPolygon(mousePoint, (shape as Polygon).coor);
+      return await this.isPointInPolygon(mousePoint, (shape as Polygon).coor);
     if (shape.type === Shape.Line)
-      return this.isPointInLine(mousePoint, (shape as Line).coor);
+      return await this.isPointInLine(mousePoint, (shape as Line).coor);
     if (shape.type === Shape.Grid)
-      return this.isPointInRect(mousePoint, (shape as Grid).coor);
+      return await this.isPointInRect(mousePoint, (shape as Grid).coor);
     return false;
   }
 
-  hitOnShape(mousePoint: Point): [number, AllShape] {
-    const shape = this.hitAllOnShape(mousePoint)[0];
+  async hitOnShape(mousePoint: Point): Promise<[number, AllShape]> {
+    const shape = (await this.hitAllOnShape(mousePoint))[0];
     return shape ? [this.dataset.indexOf(shape), shape] : [-1, shape];
   }
 
@@ -922,12 +970,12 @@ export default class CanvasSelect extends EventBus {
    * @param mousePoint 点击位置
    * @returns
    */
-  hitAllOnShape(mousePoint: Point): AllShape[] {
+  async hitAllOnShape(mousePoint: Point): Promise<AllShape[]> {
     const hits: AllShape[] = [];
     for (let i = this.dataset.length - 1; i > -1; i--) {
       const shape = this.dataset[i];
       if (shape.hide) continue;
-      if (this.isShapeHit(shape, mousePoint)) {
+      if (await this.isShapeHit(shape, mousePoint)) {
         if (this.focusMode && !shape.active) continue;
         hits.push(shape);
       }
@@ -940,7 +988,7 @@ export default class CanvasSelect extends EventBus {
    * @param e MouseEvent
    * @returns 布尔值
    */
-  isInBackground(e: MouseEvent | TouchEvent): boolean {
+  async isInBackground(e: MouseEvent | TouchEvent): Promise<boolean> {
     const { mouseX, mouseY } = this.mergeEvent(e);
     return (
       mouseX >= this.originX &&
@@ -956,7 +1004,7 @@ export default class CanvasSelect extends EventBus {
    * @param coor 区域坐标
    * @returns 布尔值
    */
-  isPointInRect(point: Point, coor: Point[]): boolean {
+  async isPointInRect(point: Point, coor: Point[]): Promise<boolean> {
     const [x, y] = point;
     const [[x0, y0], [x1, y1]] = coor.map((a) => a.map((b) => b * this.scale));
     return (
@@ -973,7 +1021,7 @@ export default class CanvasSelect extends EventBus {
    * @param coor 区域坐标
    * @returns 布尔值
    */
-  isPointInPolygon(point: Point, coor: Point[]): boolean {
+  async isPointInPolygon(point: Point, coor: Point[]): Promise<boolean> {
     if (!this.offScreenCtx) return false;
     this.offScreenCtx.save();
     this.offScreenCtx.clearRect(0, 0, this.WIDTH, this.HEIGHT);
@@ -989,7 +1037,9 @@ export default class CanvasSelect extends EventBus {
     });
     this.offScreenCtx.closePath();
     this.offScreenCtx.fill();
-    const areaData = this.offScreenCtx.getImageData(
+    await this.drawOffscreen();
+    const areaData = await this.getImageDataFromCanvas(
+      this.offscreenCanvasId,
       0,
       0,
       this.WIDTH,
@@ -1008,7 +1058,11 @@ export default class CanvasSelect extends EventBus {
    * @param needScale 是否为圆形点击检测
    * @returns 布尔值
    */
-  isPointInCircle(point: Point, center: Point, r: number): boolean {
+  async isPointInCircle(
+    point: Point,
+    center: Point,
+    r: number,
+  ): Promise<boolean> {
     const [x, y] = point;
     const [x0, y0] = center.map((a) => a * this.scale);
     const distance = Math.sqrt(
@@ -1023,7 +1077,7 @@ export default class CanvasSelect extends EventBus {
    * @param coor 区域坐标
    * @returns 布尔值
    */
-  isPointInLine(point: Point, coor: Point[]): boolean {
+  async isPointInLine(point: Point, coor: Point[]): Promise<boolean> {
     if (!this.offScreenCtx) return false;
     this.offScreenCtx.save();
     this.offScreenCtx.clearRect(0, 0, this.WIDTH, this.HEIGHT);
@@ -1039,7 +1093,9 @@ export default class CanvasSelect extends EventBus {
       }
     });
     this.offScreenCtx.stroke();
-    const areaData = this.offScreenCtx.getImageData(
+    await this.drawOffscreen();
+    const areaData = await this.getImageDataFromCanvas(
+      this.offscreenCanvasId,
       0,
       0,
       this.WIDTH,
