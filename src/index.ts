@@ -345,7 +345,6 @@ export default class CanvasSelect extends EventBus {
       );
       if (this.ctrlIndex > -1 && !this.readonly) {
         // 点击到控制点
-        console.log("点击到控制点");
         const [x0, y0] = ctrls[this.ctrlIndex];
         if (
           this.activeShape.type === Shape.Polygon &&
@@ -356,12 +355,10 @@ export default class CanvasSelect extends EventBus {
         }
         this.remmber = [[offsetX - x0, offsetY - y0]];
       } else if (this.isInBackground(e)) {
-        console.log("点击到背景");
         const nx = Math.round(offsetX - this.originX / this.scale);
         const ny = Math.round(offsetY - this.originY / this.scale);
         if (this.activeShape.creating && !this.readonly) {
           // 创建中
-          console.log("创建中");
           if ([Shape.Polygon, Shape.Line].includes(this.activeShape.type)) {
             const [x, y] =
               this.activeShape.coor[this.activeShape.coor.length - 1];
@@ -375,7 +372,6 @@ export default class CanvasSelect extends EventBus {
           !this.isCtrlKey
         ) {
           // 开始创建
-          console.log("开始创建");
           let newShape;
           const curPoint: Point = [nx, ny];
           switch (this._createType) {
@@ -452,7 +448,6 @@ export default class CanvasSelect extends EventBus {
           }
         } else {
           // 是否点击到形状
-          console.log("点击到形状");
           let hitShapeIndex: number;
           let hitShape: any;
 
