@@ -117,7 +117,7 @@ export default class CanvasSelect extends EventBus {
   /** 记录背景图鼠标位移 */
   remmberOrigin: number[] = [0, 0];
   /** 0 不创建，1 矩形，2 多边形，3 点，4 折线，5 圆，6 网格 */
-  createType: Shape = Shape.None; //
+  _createType: Shape = Shape.None; //
   /** 控制点索引 */
   ctrlIndex = -1;
   /** 背景图片 */
@@ -195,6 +195,19 @@ export default class CanvasSelect extends EventBus {
     }
     this.crossX.strokeStyle = this.crossStroke;
     this.crossY.strokeStyle = this.crossStroke;
+    // 创建代理属性，以便于监听
+    Object.defineProperty(this, "createType", {
+      get: () => this._createType,
+      set: (val) => {
+        this._createType = val;
+        // 清空当前选择
+        this.dataset.forEach((x) => {
+          x.active = false;
+          x.creating = false;
+        });
+        this.update();
+      },
+    });
   }
 
   /** 当前当前选中的标注 */
@@ -332,6 +345,7 @@ export default class CanvasSelect extends EventBus {
       );
       if (this.ctrlIndex > -1 && !this.readonly) {
         // 点击到控制点
+        console.log("点击到控制点");
         const [x0, y0] = ctrls[this.ctrlIndex];
         if (
           this.activeShape.type === Shape.Polygon &&
@@ -341,11 +355,13 @@ export default class CanvasSelect extends EventBus {
           this.handleDblclick(e);
         }
         this.remmber = [[offsetX - x0, offsetY - y0]];
-      } else if (await this.isInBackground(e)) {
+      } else if (this.isInBackground(e)) {
+        console.log("点击到背景");
         const nx = Math.round(offsetX - this.originX / this.scale);
         const ny = Math.round(offsetY - this.originY / this.scale);
         if (this.activeShape.creating && !this.readonly) {
           // 创建中
+          console.log("创建中");
           if ([Shape.Polygon, Shape.Line].includes(this.activeShape.type)) {
             const [x, y] =
               this.activeShape.coor[this.activeShape.coor.length - 1];
@@ -354,14 +370,15 @@ export default class CanvasSelect extends EventBus {
             }
           }
         } else if (
-          this.createType !== Shape.None &&
+          this._createType !== Shape.None &&
           !this.readonly &&
           !this.isCtrlKey
         ) {
           // 开始创建
+          console.log("开始创建");
           let newShape;
           const curPoint: Point = [nx, ny];
-          switch (this.createType) {
+          switch (this._createType) {
             case Shape.Rect:
               newShape = new Rect(
                 { coor: [curPoint, curPoint] },
@@ -435,6 +452,7 @@ export default class CanvasSelect extends EventBus {
           }
         } else {
           // 是否点击到形状
+          console.log("点击到形状");
           let hitShapeIndex: number;
           let hitShape: any;
 
@@ -513,7 +531,7 @@ export default class CanvasSelect extends EventBus {
     const { mouseX, mouseY, mouseCX, mouseCY } = this.mergeEvent(e);
     const offsetX = Math.round(mouseX / this.scale);
     const offsetY = Math.round(mouseY / this.scale);
-    if (!this.isCtrlKey && (await this.isInBackground(e))) {
+    if (!this.isCtrlKey && this.isInBackground(e)) {
       this.crossX.coor = [
         [offsetX - this.originX / this.scale, 0],
         [offsetX - this.originX / this.scale, this.image.height],
@@ -541,8 +559,7 @@ export default class CanvasSelect extends EventBus {
       if (
         this.ctrlIndex > -1 &&
         this.remmber.length &&
-        ((await this.isInBackground(e)) ||
-          this.activeShape.type === Shape.Circle)
+        (this.isInBackground(e) || this.activeShape.type === Shape.Circle)
       ) {
         const [[x, y]] = this.remmber;
         // resize矩形或旋转
@@ -677,7 +694,7 @@ export default class CanvasSelect extends EventBus {
           }
         }
         if (noLimit) this.activeShape.coor = coor;
-      } else if (this.activeShape.creating && (await this.isInBackground(e))) {
+      } else if (this.activeShape.creating && this.isInBackground(e)) {
         // const x = Math.round(offsetX - this.originX / this.scale);
         // const y = Math.round(offsetY - this.originY / this.scale);
         // 创建矩形
@@ -798,8 +815,8 @@ export default class CanvasSelect extends EventBus {
       // 双击切换网格分区选中状态
       if (this.activeShape.active) {
         this.activeShape.gridRects.forEach(
-          async (rect: { coor: Point[]; index: number }) => {
-            if (await this.isPointInRect(this.mouse, rect.coor)) {
+          (rect: { coor: Point[]; index: number }) => {
+            if (this.isPointInRect(this.mouse, rect.coor)) {
               const thisIndex = this.activeShape.selected.findIndex(
                 (x: number) => rect.index === x,
               );
@@ -938,25 +955,25 @@ export default class CanvasSelect extends EventBus {
    */
   async isShapeHit(shape: AllShape, mousePoint: Point): Promise<boolean> {
     if (shape.type === Shape.Dot)
-      return await this.isPointInCircle(
+      return this.isPointInCircle(
         mousePoint,
         shape.coor as Point,
         this.ctrlRadius,
       );
     if (shape.type === Shape.Circle)
-      return await this.isPointInCircle(
+      return this.isPointInCircle(
         mousePoint,
         shape.coor as Point,
         (shape as Circle).radius * this.scale,
       );
     if (shape.type === Shape.Rect)
-      return await this.isPointInRect(mousePoint, (shape as Rect).coor);
+      return this.isPointInRect(mousePoint, (shape as Rect).coor);
     if (shape.type === Shape.Polygon)
       return await this.isPointInPolygon(mousePoint, (shape as Polygon).coor);
     if (shape.type === Shape.Line)
       return await this.isPointInLine(mousePoint, (shape as Line).coor);
     if (shape.type === Shape.Grid)
-      return await this.isPointInRect(mousePoint, (shape as Grid).coor);
+      return this.isPointInRect(mousePoint, (shape as Grid).coor);
     return false;
   }
 
@@ -988,7 +1005,7 @@ export default class CanvasSelect extends EventBus {
    * @param e MouseEvent
    * @returns 布尔值
    */
-  async isInBackground(e: MouseEvent | TouchEvent): Promise<boolean> {
+  isInBackground(e: MouseEvent | TouchEvent): boolean {
     const { mouseX, mouseY } = this.mergeEvent(e);
     return (
       mouseX >= this.originX &&
@@ -1004,7 +1021,7 @@ export default class CanvasSelect extends EventBus {
    * @param coor 区域坐标
    * @returns 布尔值
    */
-  async isPointInRect(point: Point, coor: Point[]): Promise<boolean> {
+  isPointInRect(point: Point, coor: Point[]): boolean {
     const [x, y] = point;
     const [[x0, y0], [x1, y1]] = coor.map((a) => a.map((b) => b * this.scale));
     return (
@@ -1058,11 +1075,7 @@ export default class CanvasSelect extends EventBus {
    * @param needScale 是否为圆形点击检测
    * @returns 布尔值
    */
-  async isPointInCircle(
-    point: Point,
-    center: Point,
-    r: number,
-  ): Promise<boolean> {
+  isPointInCircle(point: Point, center: Point, r: number): boolean {
     const [x, y] = point;
     const [x0, y0] = center.map((a) => a * this.scale);
     const distance = Math.sqrt(
