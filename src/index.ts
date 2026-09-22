@@ -102,9 +102,7 @@ export default class CanvasSelect extends EventBus {
   /** 所有标注数据 */
   dataset: AllShape[] = [];
 
-  offScreen: HTMLCanvasElement | undefined;
-
-  offScreenCtx: CanvasRenderingContext2D | null | undefined;
+  offScreenCtx: UniNamespace.CanvasContext | null | undefined;
 
   /** 记录锚点距离 */
   remmber: number[][] = [];
@@ -1667,16 +1665,22 @@ export default class CanvasSelect extends EventBus {
   /**
    * 点击事件适配器
    */
-  public adapterEvent(ev: (e: TouchEvent | MouseEvent) => void): (e: TouchEvent | MouseEvent) => void {
+  public adapterEvent(
+    ev: (e: TouchEvent | MouseEvent) => void,
+  ): (e: TouchEvent | MouseEvent) => void {
     return (e: TouchEvent | MouseEvent) => {
       const _e = JSON.parse(JSON.stringify(e));
       if (this.isMobile) {
-        _e.touches = Object.values(_e.touches).map((v: any) => ({...v, clientX: v.x, clientY: v.y}));
+        _e.touches = Object.values(_e.touches).map((v: any) => ({
+          ...v,
+          clientX: v.x,
+          clientY: v.y,
+        }));
       }
       ev.call(this, _e);
     };
   }
-  
+
   /**
    * 调试断言工具
    */
