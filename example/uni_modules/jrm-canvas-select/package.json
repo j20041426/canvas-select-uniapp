@@ -2,18 +2,18 @@
 	"id": "jrm-canvas-select",
 	"displayName": "jrm-canvas-select",
 	"version": "1.0.0",
-	"description": "用于图片标注的uni-app组件",
+	"description": "用于图片标注的uni-app组件，基于canvas-select改造而来",
 	"keywords": [
-		"canvas",
-		"canvas-select",
-		"图片标注",
-		"AI训练"
-	],
+        "canvas",
+        "canvas-select",
+        "图片标注",
+        "AI训练"
+    ],
 	"repository": "",
 	"engines": {
 		"HBuilderX": "^3.1.0",
-		"uni-app": "^3.1.0",
-		"uni-app-x": "^3.1.0"
+		"uni-app": "^3.8.4",
+		"uni-app-x": "^3.8.4"
 	},
 	"dcloudext": {
 		"type": "component-vue",
@@ -26,46 +26,46 @@
 			}
 		},
 		"contact": {
-			"qq": ""
+			"qq": "363511684"
 		},
 		"declaration": {
-			"ads": "",
-			"data": "",
-			"permissions": ""
+			"ads": "无",
+			"data": "无",
+			"permissions": "无"
 		},
 		"npmurl": "",
-		"darkmode": "-",
-		"i18n": "-",
-		"widescreen": "-"
+		"darkmode": "x",
+		"i18n": "x",
+		"widescreen": "√"
 	},
 	"uni_modules": {
 		"dependencies": [],
 		"encrypt": [],
 		"platforms": {
 			"cloud": {
-				"tcb": "-",
-				"aliyun": "-",
-				"alipay": "-"
+				"tcb": "x",
+				"aliyun": "x",
+				"alipay": "x"
 			},
 			"client": {
 				"uni-app": {
 					"vue": {
-						"vue2": "-",
-						"vue3": "-"
+                        "vue2": "√",
+                        "vue3": "√"
 					},
 					"web": {
-						"safari": "-",
-						"chrome": "-"
+                        "safari": "√",
+                        "chrome": "√"
 					},
 					"app": {
-						"vue": "-",
-						"nvue": "-",
-						"android": "-",
-						"ios": "-",
-						"harmony": "-"
+                        "vue": "√",
+                        "nvue": "√",
+                        "android": "√",
+                        "ios": "√",
+                        "harmony": "√"
 					},
 					"mp": {
-						"weixin": "-",
+                        "weixin": "√",
 						"alipay": "-",
 						"toutiao": "-",
 						"baidu": "-",
@@ -83,16 +83,16 @@
 				},
 				"uni-app-x": {
 					"web": {
-						"safari": "-",
-						"chrome": "-"
+                        "safari": "√",
+                        "chrome": "√"
 					},
 					"app": {
-						"android": "-",
-						"ios": "-",
-						"harmony": "-"
+                        "android": "√",
+                        "ios": "√",
+                        "harmony": "√"
 					},
 					"mp": {
-						"weixin": "-"
+                        "weixin": "√"
 					}
 				}
 			}
