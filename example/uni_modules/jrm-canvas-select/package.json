@@ -2,13 +2,13 @@
 	"id": "jrm-canvas-select",
 	"displayName": "jrm-canvas-select",
 	"version": "1.0.0",
-	"description": "jrm-canvas-select",
+	"description": "用于图片标注的uniapp组件",
 	"keywords": [
 		"canvas",
-        "canvas-select",
+		"canvas-select",
 		"图片标注",
 		"AI训练"
-    ],
+	],
 	"repository": "https://github.com/j20041426/canvas-select-uniapp",
 	"engines": {
 		"HBuilderX": "^3.1.0",

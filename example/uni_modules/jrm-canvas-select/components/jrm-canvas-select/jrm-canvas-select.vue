@@ -54,6 +54,8 @@ export default {
 						},
 						this.url,
 					);
+					// canvas 位于自定义组件内，导出图片等 API 需要组件实例定位 canvas-id
+					this.instance.componentInstance = this;
 
 					this.touch.down = this.instance.adapterEvent(
 						this.instance.handleMouseDown,

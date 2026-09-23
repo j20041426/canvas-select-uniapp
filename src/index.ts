@@ -109,6 +109,11 @@ export default class CanvasSelect extends EventBus {
   canvasId = "";
   /** 离屏画布 canvas-id，用于像素命中检测时读取画布数据 */
   offscreenCanvasId = "";
+  /**
+   * 画布所在的自定义组件实例
+   * 微信小程序等平台中 canvas 位于自定义组件内时，传入该实例才能定位到 canvas-id
+   */
+  componentInstance: any = null;
 
   /** 记录锚点距离 */
   remmber: number[][] = [];
@@ -1743,6 +1748,31 @@ export default class CanvasSelect extends EventBus {
       }
       ev.call(this, _e);
     };
+  }
+
+  /**
+   * 导出图片
+   */
+  public exportImage({
+    fileType = "jpg",
+    quality = 0.9,
+  }: { fileType?: string; quality?: number } = {}) {
+    return new Promise<string>((resolve, reject) => {
+      uni.canvasToTempFilePath(
+        {
+          canvasId: this.canvasId,
+          fileType,
+          quality,
+          success: (res) => {
+            resolve(res.tempFilePath);
+          },
+          fail: (err) => {
+            reject(err);
+          },
+        },
+        this.componentInstance,
+      );
+    });
   }
 
   /**

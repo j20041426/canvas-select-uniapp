@@ -247,6 +247,15 @@
 				<view class="btn" @click="changeImage">更换图片</view>
 				<view class="btn" @click="chooseLocalImage">选择本地图片</view>
 			</view>
+			<view class="grid">
+				<view class="btn" @click="exportImage">{{
+					exporting ? "导出中..." : "导出图片"
+				}}</view>
+				<view class="btn" @click="saveToAlbum">保存到相册</view>
+			</view>
+			<view class="output" v-if="lastExportPath"
+				>导出路径：{{ lastExportPath }}</view
+			>
 		</view>
 
 		<view class="section">
@@ -382,6 +391,8 @@ const gridCol = ref(2);
 const imageUrl = ref("/static/bg.jpg");
 const dataOutput = ref("暂无标注数据");
 const eventLog = ref([]);
+const lastExportPath = ref("");
+const exporting = ref(false);
 
 const modeName = computed(() => SHAPE_NAMES[createType.value] || "选择模式");
 
@@ -789,6 +800,51 @@ function chooseLocalImage() {
 			const src = res.tempFilePaths[0];
 			if (instance) instance.setImage(src);
 			addLog("选择本地图片", src);
+		},
+	});
+}
+
+async function exportImage() {
+	if (!instance || exporting.value) return;
+	exporting.value = true;
+	try {
+		// update() 内部有 10ms 防抖，先重绘并让出一帧，避免导出到旧画面
+		instance.update();
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		const tempFilePath = await instance.exportImage({
+			fileType: "jpg",
+			quality: 0.9,
+		});
+		lastExportPath.value = tempFilePath;
+		addLog("导出图片", tempFilePath);
+		uni.previewImage({ urls: [tempFilePath] });
+	} catch (err) {
+		addLog("导出图片失败", String(err && err.errMsg ? err.errMsg : err));
+		uni.showToast({ title: "导出图片失败", icon: "none" });
+	} finally {
+		exporting.value = false;
+	}
+}
+
+function saveToAlbum() {
+	if (!lastExportPath.value) {
+		uni.showToast({ title: "请先导出图片", icon: "none" });
+		return;
+	}
+	// #ifdef H5
+	uni.showToast({ title: "H5 请长按预览图保存", icon: "none" });
+	addLog("保存到相册", "H5 环境请长按预览图保存");
+	return;
+	// #endif
+	uni.saveImageToPhotosAlbum({
+		filePath: lastExportPath.value,
+		success: () => {
+			addLog("保存到相册", lastExportPath.value);
+			uni.showToast({ title: "已保存到相册", icon: "none" });
+		},
+		fail: (err) => {
+			addLog("保存到相册失败", String(err && err.errMsg ? err.errMsg : err));
+			uni.showToast({ title: "保存失败，请检查相册权限", icon: "none" });
 		},
 	});
 }
