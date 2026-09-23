@@ -182,11 +182,19 @@ export default class CanvasSelect extends EventBus {
   /** 每次缩放变化值 */
   scaleDelta: number = 0.05;
 
-  constructor(options: CanvasSelectOptions, src?: string) {
+  constructor(
+    options: CanvasSelectOptions,
+    src?: string,
+    componentInstance?: any,
+  ) {
     super();
     if (options.canvasId && options.offscreenCanvasId) {
-      this.ctx = uni.createCanvasContext(options.canvasId);
-      this.offScreenCtx = uni.createCanvasContext(options.offscreenCanvasId);
+      this.ctx = uni.createCanvasContext(options.canvasId, componentInstance);
+      this.offScreenCtx = uni.createCanvasContext(
+        options.offscreenCanvasId,
+        componentInstance,
+      );
+      this.componentInstance = componentInstance;
       this.canvasId = options.canvasId;
       this.offscreenCanvasId = options.offscreenCanvasId;
       // const dpr = uni.getDeviceInfo()?.devicePixelRatio || 1;
@@ -194,6 +202,10 @@ export default class CanvasSelect extends EventBus {
       this.HEIGHT = Math.round(options.height);
       // this.LEFT = Math.round(options.left);
       // this.TOP = Math.round(options.top);
+      this.ctx.rect(10, 10, 150, 75);
+      this.ctx.setFillStyle("red");
+      this.ctx.fill();
+      this.ctx.draw();
       src && this.setImage(src);
     } else {
       console.warn("canvas context is required!");
@@ -248,19 +260,22 @@ export default class CanvasSelect extends EventBus {
   ) {
     return new Promise<UniNamespace.CanvasGetImageDataRes>(
       (resolve, reject) => {
-        uni.canvasGetImageData({
-          canvasId,
-          x,
-          y,
-          width,
-          height,
-          success: (res) => {
-            resolve(res);
+        uni.canvasGetImageData(
+          {
+            canvasId,
+            x,
+            y,
+            width,
+            height,
+            success: (res) => {
+              resolve(res);
+            },
+            fail: (err) => {
+              reject(err);
+            },
           },
-          fail: (err) => {
-            reject(err);
-          },
-        });
+          this.componentInstance,
+        );
       },
     );
   }

@@ -2,7 +2,8 @@
 	<view class="page">
 		<view class="canvas-wrap">
 			<jrm-canvas-select
-				style="width: 100%; height: 710rpx"
+				width="100%"
+				height="710rpx"
 				url="/static/bg.jpg"
 				@inited="onInited"
 			></jrm-canvas-select>
@@ -843,7 +844,10 @@ function saveToAlbum() {
 			uni.showToast({ title: "已保存到相册", icon: "none" });
 		},
 		fail: (err) => {
-			addLog("保存到相册失败", String(err && err.errMsg ? err.errMsg : err));
+			addLog(
+				"保存到相册失败",
+				String(err && err.errMsg ? err.errMsg : err),
+			);
 			uni.showToast({ title: "保存失败，请检查相册权限", icon: "none" });
 		},
 	});

@@ -1,5 +1,5 @@
 <template>
-	<view class="jrm-canvas-select-wrap">
+	<view class="jrm-canvas-select-wrap" :style="{ width, height }">
 		<canvas
 			class="canvas"
 			canvas-id="canvas-select"
@@ -18,10 +18,19 @@
 </template>
 
 <script>
-import CanvasSelect from "../../../../../src/index";
+// import CanvasSelect from "../../../../../src/index";
+import CanvasSelect from "../../lib/canvas-select.esm.js";
 
 export default {
 	props: {
+		width: {
+			type: String,
+			default: "100%",
+		},
+		height: {
+			type: String,
+			default: "100%",
+		},
 		url: {
 			type: String,
 			default: "",
@@ -37,6 +46,7 @@ export default {
 	methods: {
 		initCanvas() {
 			uni.createSelectorQuery()
+				.in(this)
 				.select(".jrm-canvas-select-wrap>.canvas")
 				.boundingClientRect((data) => {
 					if (!data || !data.width || !data.height) {
@@ -53,9 +63,8 @@ export default {
 							top: data.top,
 						},
 						this.url,
+						this,
 					);
-					// canvas 位于自定义组件内，导出图片等 API 需要组件实例定位 canvas-id
-					this.instance.componentInstance = this;
 
 					this.touch.down = this.instance.adapterEvent(
 						this.instance.handleMouseDown,
